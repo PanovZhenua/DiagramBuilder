@@ -1,59 +1,28 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Collections.Generic;
 
-public class FEODiagram
+namespace DiagramBuilder.Models
 {
-    public List<FEOComponent> Components { get; set; }
-    public List<FEOArrow> Arrows { get; set; }
-
-    public FEODiagram()
+    public class FEOComponent
     {
-        Components = new List<FEOComponent>();
-        Arrows = new List<FEOArrow>();
+        public string Code { get; set; }
+        public string Name { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Width { get; set; } = 120;
+        public double Height { get; set; } = 60;
     }
 
-    // Простой автолейаут по уровням
-    public void AutoLayout(double startX = 100, double startY = 100, double layerStepY = 120, double blockStepX = 250)
+    public class FEODiagram
     {
-        var levels = new Dictionary<FEOComponent, int>();
-        var visiting = new HashSet<FEOComponent>();
+        public List<FEOComponent> Components { get; set; } = new List<FEOComponent>();
+        public List<ArrowData> Arrows { get; set; } = new List<ArrowData>();
 
-        int Depth(FEOComponent c)
+        public void AutoLayout(double startX = 100, double startY = 100, double stepY = 120)
         {
-            if (levels.ContainsKey(c)) return levels[c];
-            if (!c.Inputs.Any()) { levels[c] = 0; return 0; }
-            if (visiting.Contains(c))
+            for (int i = 0; i < Components.Count; i++)
             {
-                // Защита: цикл найден!
-                levels[c] = 0;
-                return 0;
-            }
-            visiting.Add(c);
-            int d = 0;
-            foreach (var inp in c.Inputs)
-            {
-                if (inp.From != null)
-                    d = Math.Max(d, Depth(inp.From) + 1);
-            }
-            levels[c] = d;
-            visiting.Remove(c);
-            return d;
-        }
-
-        foreach (var cmp in Components) Depth(cmp);
-
-        var byLevel = Components.GroupBy(c => levels[c])
-                                .OrderBy(g => g.Key)
-                                .ToList();
-
-        for (int lvl = 0; lvl < byLevel.Count; lvl++)
-        {
-            var group = byLevel[lvl].ToList();
-            for (int k = 0; k < group.Count; k++)
-            {
-                group[k].X = startX + k * blockStepX;
-                group[k].Y = startY + lvl * layerStepY;
+                Components[i].X = startX;
+                Components[i].Y = startY + i * stepY;
             }
         }
     }

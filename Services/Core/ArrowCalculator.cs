@@ -6,51 +6,56 @@ using DiagramBuilder.Models;
 
 namespace DiagramBuilder.Services.Core
 {
+    /// <summary>
+    /// Сегмент стрелки между двумя точками
+    /// </summary>
     public class ArrowSegment
     {
-        public Point Start { get; set; }
-        public Point End { get; set; }
-        public string Direction { get; set; }
+        public Point Start { get; set; } // Начало сегмента
+        public Point End { get; set; }   // Конец сегмента
+        public string Direction { get; set; } // Направление ("up", "down", "right")
     }
 
+    /// <summary>
+    /// Класс для вычисления траекторий стрелок между блоками схемы
+    /// </summary>
     public static class ArrowCalculator
     {
-        private static Dictionary<string, DiagramBlock> allBlocks;
+        private static Dictionary<string, DiagramBlock> allBlocks; // Все блоки схемы для глобальных расчетов
 
+        // ================== БАЗОВЫЕ МЕТОДЫ ==================
+
+        /// <summary>Передать коллекцию всех блоков для последующих вычислений</summary>
         public static void SetAllBlocks(Dictionary<string, DiagramBlock> blocks)
         {
             allBlocks = blocks;
         }
 
         /// <summary>
-        /// Препроцессинг стрелок: связанные идут ниже, несвязанные выше
+        /// Препроцессинг стрелок для наглядного распределения по сторонам: 
+        /// сначала идут обычные (plain), потом connect (связанные)
         /// </summary>
         public static List<ArrowData> PreprocessArrows(List<ArrowData> arrows, Dictionary<string, DiagramBlock> blocks)
         {
             var processed = new List<ArrowData>();
 
-            // Группируем по стороне и блоку
+            // Группировка стрелок по блоку и стороне
             var groups = arrows.GroupBy(a =>
             {
                 string blockCode = "";
                 string side = a.Type ?? "connect";
-                if (side == "left" || side == "top" || side == "bottom")
-                    blockCode = a.To;
-                else if (side == "right" || side == "connect")
-                    blockCode = a.From;
-                return (blockCode, side);
+                if (side == "left" || side == "top" || side == "bottom") blockCode = a.To;
+                else blockCode = a.From; // "right" и "connect"
+                return blockCode + "|" + side; // уникальный ключ группы
             });
 
             foreach (var group in groups)
             {
-                // Разделяем несвязанные и connect
                 var plain = group.Where(a => a.Type != "connect").ToList();
                 var connected = group.Where(a => a.Type == "connect").ToList();
 
                 int totalCount = plain.Count + connected.Count;
                 int idx = 0;
-
-                // Несвязанные сверху на стороне (первым распределяются по стороне)
                 foreach (var arrow in plain)
                 {
                     processed.Add(new ArrowData
@@ -64,7 +69,6 @@ namespace DiagramBuilder.Services.Core
                     });
                     idx++;
                 }
-                // Связанные ― всегда НАИБОЛЕЕ НИЗКИЕ по индексу
                 foreach (var arrow in connected)
                 {
                     processed.Add(new ArrowData
@@ -79,10 +83,12 @@ namespace DiagramBuilder.Services.Core
                     idx++;
                 }
             }
-
             return processed;
         }
 
+        /// <summary>
+        /// Основной точка входа: рассчитывает сегменты стрелки по типу и позиции
+        /// </summary>
         public static List<ArrowSegment> CalculateArrowPath(
             DiagramBlock fromBlock,
             DiagramBlock toBlock,
@@ -91,7 +97,6 @@ namespace DiagramBuilder.Services.Core
             int totalOnSide = 1)
         {
             if (arrowType == null) arrowType = "connect";
-
             switch (arrowType.ToLower())
             {
                 case "left":
@@ -108,15 +113,14 @@ namespace DiagramBuilder.Services.Core
             }
         }
 
-        // ========== СТРЕЛКИ С РАСПРЕДЕЛЕНИЕМ ==========
+        // ================== МЕТОДЫ ДЛЯ РАССЧЕТА СТРЕЛОК ==================
 
+        /// <summary>Короткая стрелка влево от блока</summary>
         private static List<ArrowSegment> CalculateLeftArrow(DiagramBlock toBlock, int index, int total)
         {
             var segments = new List<ArrowSegment>();
             double endX = toBlock.Left;
             double startX = endX - 80;
-
-            // Y с учетом распределения
             double endY = CalculateDistributedY(toBlock, index, total);
             segments.Add(new ArrowSegment
             {
@@ -127,13 +131,13 @@ namespace DiagramBuilder.Services.Core
             return segments;
         }
 
+        /// <summary>Короткая стрелка вправо от блока</summary>
         private static List<ArrowSegment> CalculateRightArrow(DiagramBlock fromBlock, int index, int total)
         {
             var segments = new List<ArrowSegment>();
             double startX = fromBlock.Right;
             double endX = startX + 80;
             double startY = CalculateDistributedY(fromBlock, index, total);
-
             segments.Add(new ArrowSegment
             {
                 Start = new Point(startX, startY),
@@ -143,6 +147,7 @@ namespace DiagramBuilder.Services.Core
             return segments;
         }
 
+        /// <summary>Стрелка сверху вниз к блоку</summary>
         private static List<ArrowSegment> CalculateTopArrow(DiagramBlock toBlock, int index, int total)
         {
             var segments = new List<ArrowSegment>();
@@ -150,7 +155,6 @@ namespace DiagramBuilder.Services.Core
             double startY = minTop - 60;
             double endX = CalculateDistributedX(toBlock, index, total);
             double endY = toBlock.Top;
-
             segments.Add(new ArrowSegment
             {
                 Start = new Point(endX, startY),
@@ -160,6 +164,7 @@ namespace DiagramBuilder.Services.Core
             return segments;
         }
 
+        /// <summary>Стрелка снизу вверх к блоку</summary>
         private static List<ArrowSegment> CalculateBottomArrow(DiagramBlock toBlock, int index, int total)
         {
             var segments = new List<ArrowSegment>();
@@ -167,7 +172,6 @@ namespace DiagramBuilder.Services.Core
             double startY = maxBottom + 60;
             double endX = CalculateDistributedX(toBlock, index, total);
             double endY = toBlock.Bottom;
-
             segments.Add(new ArrowSegment
             {
                 Start = new Point(endX, startY),
@@ -178,7 +182,8 @@ namespace DiagramBuilder.Services.Core
         }
 
         /// <summary>
-        /// Для connect стрелки: всегда последняя по индексу, и Y чуть ниже распределяемых
+        /// Прямая или сложная connect стрелка между блоками
+        /// (если блоки на одной оси - прямая, иначе излом)
         /// </summary>
         private static List<ArrowSegment> CalculateConnectArrow(
             DiagramBlock fromBlock, DiagramBlock toBlock,
@@ -187,11 +192,9 @@ namespace DiagramBuilder.Services.Core
             var segments = new List<ArrowSegment>();
             if (fromBlock == null || toBlock == null) return segments;
 
-            double connectYOffset = 18.0; // Смещение для связи: ниже распределяемых
-
+            double connectYOffset = 18.0; // смещение для связи: чуть ниже центра
             double fromY = fromBlock.Top + fromBlock.Visual.Height / 2;
             double toY = toBlock.Top + toBlock.Visual.Height / 2 + connectYOffset;
-
             double startX = fromBlock.Right;
             double startY = fromY + connectYOffset;
             double endX = toBlock.Left;
@@ -231,8 +234,7 @@ namespace DiagramBuilder.Services.Core
             return segments;
         }
 
-        // ========== ДИСТРИБУЦИЯ ПО СТОРОНЕ ==========
-
+        // ========== Распределение стрелок на стороне блока ==========
         private static double CalculateDistributedY(DiagramBlock block, int index, int total)
         {
             if (total < 1) total = 1;
@@ -249,12 +251,11 @@ namespace DiagramBuilder.Services.Core
             return block.Left + step * (index + 1);
         }
 
-        // ========== МИН/МАКС ==========
+        // ========== Глобальные минимумы и максимумы для canvas ==========
         private static double GetMinTopY()
         {
             if (allBlocks == null || allBlocks.Count == 0)
                 return 200;
-
             return allBlocks.Values.Min(b => b.Top);
         }
 
@@ -262,7 +263,6 @@ namespace DiagramBuilder.Services.Core
         {
             if (allBlocks == null || allBlocks.Count == 0)
                 return 300;
-
             return allBlocks.Values.Max(b => b.Bottom);
         }
     }

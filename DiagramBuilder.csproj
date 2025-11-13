@@ -65,25 +65,29 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="Models\ArrowData.cs" />
-    <Compile Include="Models\ConnectionLine.cs" />
+    <Compile Include="Models\Arrows\ArrowData.cs" />
+    <Compile Include="Models\Arrows\ConnectionLine.cs" />
     <Compile Include="Models\DiagramType.cs" />
-    <Compile Include="Models\FEOArrow.cs" />
-    <Compile Include="Models\FEOComponent.cs" />
     <Compile Include="Models\FEODiagram.cs" />
-    <Compile Include="Models\IDEF3Junction.cs" />
+    <Compile Include="Models\Junctions\IDEF3Diagram.cs" />
+    <Compile Include="Models\Junctions\IDEF3Link.cs" />
+    <Compile Include="Models\Junctions\IDEF3UOW.cs" />
+    <Compile Include="Models\Junctions\IDEF3Junction.cs" />
     <Compile Include="Services\Core\ArrowCalculator.cs" />
     <Compile Include="Services\Core\ConnectionManager.cs" />
-    <Compile Include="Services\Core\DiagramExporter.cs" />
-    <Compile Include="Services\Core\DiagramParser.cs" />
+    <Compile Include="Services\Core\DiagramStyle.cs" />
+    <Compile Include="Services\Core\TextFormatterHelper.cs" />
+    <Compile Include="Services\Export\DiagramExporter.cs" />
+    <Compile Include="Services\Layout\IDEF3LayoutEngine.cs" />
+    <Compile Include="Services\Management\SnapHelper.cs" />
+    <Compile Include="Services\Parsers\DiagramParser.cs" />
     <Compile Include="Services\Export\ExportResult.cs" />
     <Compile Include="Services\Export\SimpleCanvasExporter.cs" />
-    <Compile Include="Services\Management\FEOBlockDragger.cs" />
     <Compile Include="Services\Rendering\DiagramRenderer.cs" />
     <Compile Include="Services\Management\DiagramTypeManagers.cs" />
     <Compile Include="Services\Management\DragDropManager.cs" />
     <Compile Include="Services\Rendering\FEORenderer.cs" />
-    <Compile Include="Services\IDEF0Validator.cs" />
+    <Compile Include="Services\Rendering\IDEF0Validator.cs" />
     <Compile Include="Services\Rendering\IDEF3Renderer.cs" />
     <Compile Include="Services\Rendering\NodeTreeRenderer.cs" />
     <Page Include="MainWindow.xaml">
@@ -100,8 +104,8 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Models\DiagramArrow.cs" />
-    <Compile Include="Models\DiagramBlock.cs" />
+    <Compile Include="Models\Arrows\DiagramArrow.cs" />
+    <Compile Include="Models\Blocks\DiagramBlock.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>

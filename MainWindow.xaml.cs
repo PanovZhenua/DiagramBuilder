@@ -17,70 +17,92 @@ namespace DiagramBuilder
 {
     public partial class MainWindow : Window
     {
-        // ========= ПОЛЯ =========
+        // ==== Основные коллекции и менеджеры ====
+        private Dictionary<string, DiagramBlock> blocks = new Dictionary<string, DiagramBlock>();
+        private List<DiagramArrow> arrows = new List<DiagramArrow>();
+        private DiagramRenderer renderer;
+        private ConnectionManager connectionManager;
+        private DragDropManager dragDropManager;
+        private DiagramTypeManagers typeManager;
+        private const double MoveStep = 5.0; // шаг перемещения
+        private UIElement selectedElement; // для блока или label
 
-        private bool isPanning = false;
-        private Point panStartMouse, panStartOffset;
-        private readonly Dictionary<string, DiagramBlock> blocks = new Dictionary<string, DiagramBlock>();
-        private readonly List<DiagramArrow> arrows = new List<DiagramArrow>();
-        private List<ArrowData> rawArrowData = new List<ArrowData>();
-        private readonly DiagramRenderer renderer;
-        private readonly ConnectionManager connectionManager;
-        private readonly DragDropManager dragDropManager;
-        private readonly DiagramTypeManagers typeManager;
+        // FEO
+        private FEODiagram currentFEO;
+        private Dictionary<string, DiagramBlock> feoBlocks = new Dictionary<string, DiagramBlock>();
+        private List<DiagramArrow> feoArrows = new List<DiagramArrow>();
         private FEORenderer feoRenderer;
-        private FEOBlockDragger feoBlockDragger;
-        private NodeTreeRenderer nodeTreeRenderer;
+
+        // IDEF3
+        private List<IDEF3UOW> lastUows = new List<IDEF3UOW>();
+        private List<IDEF3Junction> lastJunctions = new List<IDEF3Junction>();
+        private List<IDEF3Link> lastLinks = new List<IDEF3Link>();
         private IDEF3Renderer idef3Renderer;
-        private DiagramType currentDiagramType = DiagramType.IDEF0;
+
+        // IDEF0
+        private DiagramRenderer diagramRenderer;
+        private List<ArrowData> rawArrowData = new List<ArrowData>();
+
+        // NodeTree (если используется)
+        private NodeTreeRenderer nodeTreeRenderer;
         private List<DiagramParser.NodeData> nodeTreeData = new List<DiagramParser.NodeData>();
+
+        // Тип и стиль диаграммы
+        private DiagramType currentDiagramType = DiagramType.IDEF0;
+        private DiagramStyleType currentStyleType = DiagramStyleType.ClassicBlackWhite;
+        private DiagramStyle CurrentStyle { get { return DiagramStyle.GetStyle(currentStyleType); } }
+
+        // Масштабирование и панорамирование
         private double currentZoom = 1.0;
         private const double MIN_ZOOM = 0.2;
         private const double MAX_ZOOM = 3.0;
         private const double ZOOM_STEP = 0.1;
-
-        // ========= КОНСТРУКТОР И ИНИЦИАЛИЗАЦИЯ =========
+        private bool isPanning = false;
+        private Point panStartMouse, panStartOffset;
 
         public MainWindow()
         {
             InitializeComponent();
 
-            renderer = new DiagramRenderer(DiagramCanvas);
+            // Создание менеджеров/рендереров схемы
+            renderer = new DiagramRenderer(DiagramCanvas, CurrentStyle);
             connectionManager = new ConnectionManager(DiagramCanvas);
             dragDropManager = new DragDropManager(blocks, arrows, renderer, connectionManager);
             typeManager = new DiagramTypeManagers();
 
-            // Отключаем перемещение подписей по-умолчанию
+            // По умолчанию подписи заблокированы
             ChkLockLabels.IsChecked = true;
             dragDropManager.SetLabelDraggingEnabled(false);
 
-            // Регистрация событий зум/пан
+            // Регистрируем события мыши и клавиатуры для управления
             CanvasScrollViewer.PreviewMouseWheel += CanvasScrollViewer_PreviewMouseWheel;
             CanvasScrollViewer.PreviewMouseDown += CanvasScrollViewer_PreviewMouseDown;
             CanvasScrollViewer.PreviewMouseMove += CanvasScrollViewer_PreviewMouseMove;
             CanvasScrollViewer.PreviewMouseUp += CanvasScrollViewer_PreviewMouseUp;
-
-            // Перехват пробела для панорамирования
-            this.PreviewKeyDown += MainWindow_PreviewKeyDown;
-            this.PreviewKeyUp += MainWindow_PreviewKeyUp;
-
+            PreviewKeyDown += MainWindow_PreviewKeyDown;
+            PreviewKeyUp += MainWindow_PreviewKeyUp;
             DiagramCanvas.Focusable = true;
             CanvasScrollViewer.Focusable = true;
-
-            // Фокус на рабочую область при запуске
-            this.Loaded += (s, e) => CanvasScrollViewer.Focus();
+            Loaded += (s, e) => CanvasScrollViewer.Focus();
+            DiagramTextBox.PreviewMouseDown += DiagramTextBox_MouseDown;
 
             LoadSampleText();
             UpdateStatusBar();
         }
 
-        // Пример текста по умолчанию
+        public UIElement SelectedElement
+        {
+            get { return selectedElement; }
+            set { selectedElement = value; }
+        }
+
+        // ==== Загрузка примера схемы текста ====
         private void LoadSampleText()
         {
             DiagramTextBox.Text = typeManager.GetSampleText(DiagramType.IDEF0);
         }
 
-        // ========= ПАНОРАМИРОВАНИЕ ПРОБЕЛОМ =========
+        // ==== Панорамирование (пробел + мышь) ====
         private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Space && !isPanning)
@@ -101,7 +123,6 @@ namespace DiagramBuilder
                 e.Handled = true;
             }
         }
-
         private void CanvasScrollViewer_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (isPanning && e.ChangedButton == MouseButton.Left)
@@ -132,74 +153,157 @@ namespace DiagramBuilder
             }
         }
 
-        // ========= МАСШТАБИРОВАНИЕ (CTRL+Колесо) =========
+        protected override void OnPreviewKeyDown(KeyEventArgs e)
+        {
+            base.OnPreviewKeyDown(e);
+
+            if (DiagramTextBox.IsKeyboardFocusWithin)
+                return; // если сфокусированы внутри DiagramTextBox, не обрабатываем стрелки
+
+            if (SelectedElement == null)
+                return;
+
+            bool moved = false;
+            double left = Canvas.GetLeft(SelectedElement);
+            double top = Canvas.GetTop(SelectedElement);
+
+            double moveStep = MoveStep; // 5 по умолчанию
+
+            switch (e.Key)
+            {
+                case Key.Up:
+                    top -= moveStep;
+                    moved = true;
+                    break;
+                case Key.Down:
+                    top += moveStep;
+                    moved = true;
+                    break;
+                case Key.Left:
+                    left -= moveStep;
+                    moved = true;
+                    break;
+                case Key.Right:
+                    left += moveStep;
+                    moved = true;
+                    break;
+            }
+
+            if (moved)
+            {
+                Canvas.SetLeft(SelectedElement, left);
+                Canvas.SetTop(SelectedElement, top);
+
+                // --- Для блоков ---
+                if (SelectedElement is Border)
+                {
+                    var block = dragDropManager.GetBlockByVisual(SelectedElement);
+                    if (block != null)
+                    {
+                        block.X = left;
+                        block.Y = top;
+                        dragDropManager.UpdateBlockConnections(block);
+                    }
+                    dragDropManager.UpdateAllArrows();
+                    dragDropManager.NotifyBlockMoved();
+                }
+
+                // --- Для junction (ellipse) ---
+                if (SelectedElement is Ellipse ellipse)
+                {
+                    double radius = ellipse.Width / 2;
+                    double centerX = left + radius;
+                    double centerY = top + radius;
+
+                    // новое положение центра
+                    var snappedCenter = SnapHelper.SnapJunctionToBlocks(new Point(centerX, centerY), blocks);
+
+                    left = snappedCenter.X - radius;
+                    top = snappedCenter.Y - radius;
+                    Canvas.SetLeft(ellipse, left);
+                    Canvas.SetTop(ellipse, top);
+
+                    if ((idef3Renderer?.SetJunctionPositionFromEllipse(ellipse, left, top) ?? false))
+                        idef3Renderer.UpdateConnections();
+
+                    e.Handled = true;
+                }
+
+                e.Handled = true;
+            }
+        }
+
+        // ==== Масштабирование canvas через Ctrl+колесо мыши ====
         private void CanvasScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if (Keyboard.Modifiers != ModifierKeys.Control)
-                return;
+            if (Keyboard.Modifiers != ModifierKeys.Control) return;
             e.Handled = true;
 
-            Point mouseCanvasPos = e.GetPosition(DiagramCanvas);
             Point mouseScrollPos = e.GetPosition(CanvasScrollViewer);
-
             double oldZoom = currentZoom;
             double newZoom = currentZoom + (e.Delta > 0 ? ZOOM_STEP : -ZOOM_STEP);
-            newZoom = Math.Max(MIN_ZOOM, Math.Min(MAX_ZOOM, newZoom));
-            if (Math.Abs(newZoom - oldZoom) < 0.001)
-                return;
+            if (newZoom < MIN_ZOOM) newZoom = MIN_ZOOM;
+            if (newZoom > MAX_ZOOM) newZoom = MAX_ZOOM;
+            if (Math.Abs(newZoom - oldZoom) < 0.001) return;
 
-            double relX = (CanvasScrollViewer.HorizontalOffset + mouseScrollPos.X) / (DiagramCanvas.Width * oldZoom);
-            double relY = (CanvasScrollViewer.VerticalOffset + mouseScrollPos.Y) / (DiagramCanvas.Height * oldZoom);
+            double canvasWidth = DiagramCanvas.ActualWidth > 0 ? DiagramCanvas.ActualWidth : DiagramCanvas.Width;
+            double canvasHeight = DiagramCanvas.ActualHeight > 0 ? DiagramCanvas.ActualHeight : DiagramCanvas.Height;
+            if (canvasWidth <= 0) canvasWidth = 2000;
+            if (canvasHeight <= 0) canvasHeight = 1500;
+
+            double relX = (CanvasScrollViewer.HorizontalOffset + mouseScrollPos.X) / (canvasWidth * oldZoom);
+            double relY = (CanvasScrollViewer.VerticalOffset + mouseScrollPos.Y) / (canvasHeight * oldZoom);
 
             currentZoom = newZoom;
             CanvasScaleTransform.ScaleX = currentZoom;
             CanvasScaleTransform.ScaleY = currentZoom;
 
-            double newOffsetX = relX * (DiagramCanvas.Width * newZoom) - mouseScrollPos.X;
-            double newOffsetY = relY * (DiagramCanvas.Height * newZoom) - mouseScrollPos.Y;
-            CanvasScrollViewer.ScrollToHorizontalOffset(newOffsetX);
-            CanvasScrollViewer.ScrollToVerticalOffset(newOffsetY);
+            double newOffsetX = relX * (canvasWidth * newZoom) - mouseScrollPos.X;
+            double newOffsetY = relY * (canvasHeight * newZoom) - mouseScrollPos.Y;
 
-            TxtZoomLevel.Text = $"{(int)(currentZoom * 100)}%";
-            TxtStatus.Text = $"Масштаб: {(int)(currentZoom * 100)}%";
+            if (!double.IsNaN(newOffsetX)) CanvasScrollViewer.ScrollToHorizontalOffset(newOffsetX);
+            if (!double.IsNaN(newOffsetY)) CanvasScrollViewer.ScrollToVerticalOffset(newOffsetY);
+
+            TxtZoomLevel.Text = string.Format("{0}%", (int)(currentZoom * 100));
+            TxtStatus.Text = string.Format("Масштаб: {0}%", (int)(currentZoom * 100));
         }
 
-        // ========= ЗАГРУЗКА И РЕНДЕР =========
-
+        // ==== Загрузка схемы из текста ====
         private void LoadFromText_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 Clear_Click(null, null);
-                DiagramType detectedType = typeManager.DetectDiagramType(DiagramTextBox.Text);
-                typeManager.CurrentType = detectedType;
-                currentDiagramType = detectedType;
+                currentDiagramType = typeManager.DetectDiagramType(DiagramTextBox.Text);
+                typeManager.CurrentType = currentDiagramType;
+                TxtDiagramType.Text = currentDiagramType.ToString();
+                TxtStatus.Text = "Загружено: " + typeManager.GetDescription(currentDiagramType);
 
-                TxtDiagramType.Text = detectedType.ToString();
-                TxtStatus.Text = $"Загружено: {typeManager.GetDescription(detectedType)}";
-
-                switch (detectedType)
+                switch (currentDiagramType)
                 {
                     case DiagramType.IDEF0: LoadIDEF0Diagram(); break;
                     case DiagramType.FEO: LoadFEODiagram(); break;
                     case DiagramType.NodeTree: LoadNodeTreeDiagram(); break;
                     case DiagramType.IDEF3: LoadIDEF3Diagram(); break;
                 }
-
                 ChkLockLabels.IsChecked = true;
                 dragDropManager.SetLabelDraggingEnabled(false);
                 UpdateStatusBar();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка при загрузке:\n{ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Ошибка при загрузке:\n" + ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                 TxtStatus.Text = "Ошибка загрузки";
             }
         }
 
+        // ==== Загрузка и рендер IDEF0 ====
         private void LoadIDEF0Diagram()
         {
-            var (blockData, arrowData) = DiagramParser.Parse(DiagramTextBox.Text);
+            var parsed = DiagramParser.Parse(DiagramTextBox.Text);
+            var blockData = parsed.Item1;
+            var arrowData = parsed.Item2;
+
             foreach (var data in blockData)
             {
                 var block = renderer.CreateBlock(data.Text, data.Code, data.X, data.Y, data.Width, data.Height);
@@ -207,43 +311,23 @@ namespace DiagramBuilder
                 dragDropManager.AttachBlockEvents(block.Visual);
             }
             ArrowCalculator.SetAllBlocks(blocks);
-
-            rawArrowData = arrowData.Select(a => new ArrowData
-            {
-                From = a.From,
-                To = a.To,
-                Label = a.Label,
-                Type = a.Type
-            }).ToList();
-
-            var processedArrows = ArrowCalculator.PreprocessArrows(rawArrowData, blocks);
-
-            foreach (var data in processedArrows)
-            {
-                DiagramBlock fromBlock = blocks.ContainsKey(data.From) ? blocks[data.From] : null;
-                DiagramBlock toBlock = blocks.ContainsKey(data.To) ? blocks[data.To] : null;
-                var arrow = renderer.CreateArrowWithDistribution(
-                    fromBlock, toBlock, data.From, data.To, data.Label, data.Type, data.IndexOnSide, data.TotalOnSide
-                );
-                if (arrow != null)
-                {
-                    arrows.Add(arrow);
-                    if (arrow.Label != null) dragDropManager.AttachLabelEvents(arrow.Label);
-                }
-            }
+            rawArrowData = arrowData.Select(a => new ArrowData { From = a.From, To = a.To, Label = a.Label, Type = a.Type }).ToList();
+            RenderArrowsIDEF0();
             dragDropManager.SetOnBlockMovedCallback(OnBlockMoved);
-            currentDiagramType = DiagramType.IDEF0;
-
-            var validation = IDEF0Validator.Validate(blocks, arrows);
-            ShowValidationResult(validation);
+            ShowValidationResult(IDEF0Validator.Validate(blocks, arrows));
         }
 
+        // ==== Перерисовка стрелок после перемещения блока ====
         private void OnBlockMoved()
         {
-            if (currentDiagramType != DiagramType.IDEF0 || rawArrowData.Count == 0)
-                return;
-            var processedArrows = ArrowCalculator.PreprocessArrows(rawArrowData, blocks);
+            if (currentDiagramType != DiagramType.IDEF0 || rawArrowData.Count == 0) return;
+            RenderArrowsIDEF0();
+            UpdateStatusBar();
+        }
 
+        // ==== рендер стрелок IDEF0 с удалением старых ====
+        private void RenderArrowsIDEF0()
+        {
             foreach (var arrow in arrows)
             {
                 if (arrow.Lines != null)
@@ -257,74 +341,114 @@ namespace DiagramBuilder
             }
             arrows.Clear();
 
-            foreach (var data in processedArrows)
+            foreach (var data in ArrowCalculator.PreprocessArrows(rawArrowData, blocks))
             {
                 DiagramBlock fromBlock = blocks.ContainsKey(data.From) ? blocks[data.From] : null;
                 DiagramBlock toBlock = blocks.ContainsKey(data.To) ? blocks[data.To] : null;
-                var arrow = renderer.CreateArrowWithDistribution(
-                    fromBlock, toBlock, data.From, data.To, data.Label, data.Type, data.IndexOnSide, data.TotalOnSide
-                );
+                var arrow = renderer.CreateArrowWithDistribution(fromBlock, toBlock, data.From, data.To, data.Label, data.Type, data.IndexOnSide, data.TotalOnSide);
                 if (arrow != null)
                 {
                     arrows.Add(arrow);
                     if (arrow.Label != null) dragDropManager.AttachLabelEvents(arrow.Label);
                 }
             }
-            UpdateStatusBar();
         }
 
+        // ==== Загрузка схемы FEO ====
         private void LoadFEODiagram()
         {
-            var (blockData, arrowData) = DiagramParser.Parse(DiagramTextBox.Text);
+            // 1. Парсим данные
+            var parsed = DiagramParser.Parse(DiagramTextBox.Text);
+            var blockData = parsed.Item1;
+            var arrowData = parsed.Item2;
 
-            // 1. Собираем структуру (модель)
             var diagram = new FEODiagram();
-            var code2comp = new Dictionary<string, FEOComponent>();
-            foreach (var data in blockData)
+
+            // 2. Создаём компоненты (блоки)
+            foreach (var block in blockData)
             {
-                var comp = new FEOComponent
+                diagram.Components.Add(new FEOComponent
                 {
-                    Code = data.Code,
-                    Name = data.Text,
-                    X = data.X,
-                    Y = data.Y,
-                    Width = data.Width,
-                    Height = data.Height
-                };
-                diagram.Components.Add(comp);
-                code2comp[data.Code] = comp;
+                    Code = block.Code,
+                    Name = block.Text,
+                    X = block.X,
+                    Y = block.Y,
+                    Width = block.Width,
+                    Height = block.Height
+                });
             }
-            foreach (var data in arrowData)
+
+            // 3. Создаём стандартные стрелки (ArrowData)
+            foreach (var ad in arrowData)
             {
-                if (code2comp.ContainsKey(data.From) && code2comp.ContainsKey(data.To))
+                diagram.Arrows.Add(new ArrowData
                 {
-                    var arrow = new FEOArrow
+                    From = ad.From,
+                    To = ad.To,
+                    Label = ad.Label,
+                    Type = ad.Type,
+                    IndexOnSide = 0,
+                    TotalOnSide = 1
+                });
+            }
+
+            // 4. Раскладка: автоматически расставить компоненты по слоям
+            var feoRenderer = new FEORenderer(DiagramCanvas, dragDropManager, CurrentStyle);
+            feoRenderer.Render(diagram, feoBlocks, feoArrows);
+
+            // 5. Собираем визуальные блоки для стрелок и external-портов
+            feoBlocks.Clear();
+            feoArrows.Clear();
+            foreach (var comp in diagram.Components)
+                feoBlocks[comp.Code] = new DiagramBlock { Code = comp.Code, Visual = null };
+
+            foreach (var arrow in diagram.Arrows)
+            {
+                if (!string.IsNullOrEmpty(arrow.From) && arrow.From.StartsWith("external", StringComparison.OrdinalIgnoreCase) && !feoBlocks.ContainsKey(arrow.From))
+                {
+                    double x = 0, y = 0;
+                    if (arrow.From.ToLower().EndsWith("left")) x = -120;
+                    if (arrow.From.ToLower().EndsWith("bottom")) y = DiagramCanvas.Height + 75;
+                    var border = new Border
                     {
-                        From = code2comp[data.From],
-                        To = code2comp[data.To],
-                        Label = data.Label,
-                        SideFrom = "right",
-                        SideTo = "left"
+                        Width = 20,
+                        Height = 20,
+                        Background = Brushes.Transparent,
+                        BorderBrush = Brushes.Transparent
                     };
-                    diagram.Arrows.Add(arrow);
-                    arrow.From.Outputs.Add(arrow);
-                    arrow.To.Inputs.Add(arrow);
+                    Canvas.SetLeft(border, x);
+                    Canvas.SetTop(border, y);
+                    DiagramCanvas.Children.Add(border);
+                    feoBlocks[arrow.From] = new DiagramBlock { Code = arrow.From, Visual = border };
+                }
+                if (!string.IsNullOrEmpty(arrow.To) && arrow.To.StartsWith("external", StringComparison.OrdinalIgnoreCase) && !feoBlocks.ContainsKey(arrow.To))
+                {
+                    double x = 0, y = 0;
+                    if (arrow.To.ToLower().EndsWith("left")) x = -120;
+                    if (arrow.To.ToLower().EndsWith("bottom")) y = DiagramCanvas.Height + 75;
+                    var border = new Border
+                    {
+                        Width = 20,
+                        Height = 20,
+                        Background = Brushes.Transparent,
+                        BorderBrush = Brushes.Transparent
+                    };
+                    Canvas.SetLeft(border, x);
+                    Canvas.SetTop(border, y);
+                    DiagramCanvas.Children.Add(border);
+                    feoBlocks[arrow.To] = new DiagramBlock { Code = arrow.To, Visual = border };
                 }
             }
 
-            // 2. Рендер и drag
-            feoRenderer = new FEORenderer(DiagramCanvas);
-            feoBlockDragger = new FEOBlockDragger(DiagramCanvas, feoRenderer);
+            // 6. Рендерим диаграмму и стрелки
+            feoRenderer.Render(diagram, feoBlocks, feoArrows);
 
-            feoRenderer.BlockVisualCallback = (border) =>
+            // 7. При drag'n'drop обновляем стрелки
+            dragDropManager.SetOnBlockMovedCallback(() =>
             {
-                var comp = border.Tag as FEOComponent;
-                if (comp != null) feoBlockDragger.AttachDrag(border, comp);
-            };
-            // Добавить аналогично перетаскивание подписей, если надо
-
-            feoRenderer.SetDiagram(diagram);
-            feoRenderer.Render();
+                if (currentDiagramType == DiagramType.FEO && feoRenderer != null && diagram != null)
+                    feoRenderer.UpdateArrows(diagram, feoBlocks, feoArrows);
+            });
 
             currentDiagramType = DiagramType.FEO;
 
@@ -333,34 +457,66 @@ namespace DiagramBuilder
                 "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
+
+        // ==== Загрузка NodeTree ====
         private void LoadNodeTreeDiagram()
         {
             nodeTreeData = DiagramParser.ParseNodeTree(DiagramTextBox.Text);
-            nodeTreeRenderer = new NodeTreeRenderer(DiagramCanvas, blocks, connectionManager);
+            nodeTreeRenderer = new NodeTreeRenderer(DiagramCanvas, blocks, connectionManager, CurrentStyle);
             nodeTreeRenderer.RenderNodeTree(nodeTreeData);
             currentDiagramType = DiagramType.NodeTree;
-            foreach (var block in blocks.Values) dragDropManager.AttachBlockEvents(block.Visual);
 
-            MessageBox.Show($"Дерево узлов загружено!\n\nУзлов: {nodeTreeData.Count}", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
+            foreach (DiagramBlock block in blocks.Values)
+                dragDropManager.AttachBlockEvents(block.Visual);
 
-        private void LoadIDEF3Diagram()
-        {
-            var (uows, junctions, links) = DiagramParser.ParseIDEF3(DiagramTextBox.Text);
-            idef3Renderer = new IDEF3Renderer(DiagramCanvas, blocks);
-            idef3Renderer.RenderIDEF3(uows, junctions, links);
-            currentDiagramType = DiagramType.IDEF3;
-            dragDropManager.SetOnBlockMovedCallback(() => idef3Renderer?.UpdateConnections());
+            // Обновление соединений при перетаскивании
+            dragDropManager.SetOnBlockMovedCallback(() =>
+            {
+                if (currentDiagramType == DiagramType.NodeTree && connectionManager != null)
+                {
+                    connectionManager.UpdateAllConnections();
+                }
+            });
 
-            foreach (var block in blocks.Values) dragDropManager.AttachBlockEvents(block.Visual);
-            foreach (var junc in junctions)
-                idef3Renderer.AttachJunctionDragEvents(junc.Id, (id) => idef3Renderer.UpdateConnections());
-
-            MessageBox.Show($"IDEF3 загружена!\n\nРабот (UOW): {uows.Count}\nПерекрёстков: {junctions.Count}\nСвязей: {links.Count}",
+            MessageBox.Show("Дерево узлов загружено!\n\nУзлов: " + nodeTreeData.Count,
                 "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
-        // ========== ВАЛИДАЦИЯ ==========
+        // ==== Загрузка IDEF3 ====
+        private void LoadIDEF3Diagram()
+        {
+            var parsed = DiagramParser.ParseIDEF3(DiagramTextBox.Text);
+            var uowRaw = parsed.Item1;
+            var junctionRaw = parsed.Item2;
+            var linkRaw = parsed.Item3;
+
+            lastUows = uowRaw.Select(u => new IDEF3UOW { Id = u.Id, Name = u.Name }).ToList();
+            lastJunctions = junctionRaw.Select(j => new IDEF3Junction { Id = j.Id, Type = j.Type }).ToList();
+            lastLinks = linkRaw.Select(l => new IDEF3Link { From = l.From, To = l.To }).ToList();
+
+            idef3Renderer = new IDEF3Renderer(DiagramCanvas, blocks, CurrentStyle);
+            idef3Renderer.RenderIDEF3(lastUows, lastJunctions, lastLinks);
+
+            currentDiagramType = DiagramType.IDEF3;
+
+            dragDropManager.SetOnBlockMovedCallback(delegate
+            {
+                if (idef3Renderer != null)
+                    idef3Renderer.UpdateConnections();
+            });
+
+            foreach (DiagramBlock block in blocks.Values)
+                dragDropManager.AttachBlockEvents(block.Visual);
+
+            foreach (IDEF3Junction junc in lastJunctions)
+                idef3Renderer.AttachJunctionDragEvents(junc.Id, id => idef3Renderer.UpdateConnections());
+
+            MessageBox.Show(
+                "IDEF3 загружена!\n\nРабот (UOW): " + lastUows.Count + "\nПерекрёстков: " + lastJunctions.Count + "\nСвязей: " + lastLinks.Count,
+                "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // ==== Диалог валидации для IDEF0 ====
         private void ShowValidationResult(IDEF0Validator.ValidationResult validation)
         {
             string message = "Диаграмма IDEF0 загружена успешно!";
@@ -377,7 +533,7 @@ namespace DiagramBuilder
             TxtStatus.Text = validation.IsValid ? "Диаграмма загружена" : "Загружено с ошибками";
         }
 
-        // ========== БЛОКИРОВКА ==========
+        // ==== Переключатели блокировки для drag&drop ====
         private void ChkLockBlocks_Changed(object sender, RoutedEventArgs e)
         {
             if (dragDropManager != null)
@@ -399,7 +555,7 @@ namespace DiagramBuilder
             }
         }
 
-        // ========== ОЧИСТКА ==========
+        // ==== Очистка схемы и статусов ====
         private void Clear_Click(object sender, RoutedEventArgs e)
         {
             renderer.Clear();
@@ -416,27 +572,128 @@ namespace DiagramBuilder
             TxtStatus.Text = "Диаграмма очищена";
         }
 
-        // ========== ЭКСПОРТ ==========
+        // ==== Экспорт схемы в PNG ====
         private void Export_Click(object sender, RoutedEventArgs e)
         {
             bool success = SimpleCanvasExporter.ExportFromDialog(DiagramCanvas, 300);
-            if (success)
-            {
-                TxtStatus.Text = "Экспорт завершён!";
-                MessageBox.Show("Диаграмма успешно экспортирована!", "Экспорт завершён", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
+            TxtStatus.Text = success ? "Экспорт завершён!" : "Ошибка экспорта";
+            MessageBox.Show(success ? "Диаграмма успешно экспортирована!" : "Не удалось экспортировать диаграмму.",
+                success ? "Экспорт завершён" : "Ошибка", MessageBoxButton.OK,
+                success ? MessageBoxImage.Information : MessageBoxImage.Error);
+        }
+
+        // ========== Стилизация ==========
+        private void StyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Защита от NullReferenceException
+            if (DiagramCanvas == null || StyleComboBox == null)
+                return;
+
+            // Применение нового стиля
+            if (StyleComboBox.SelectedItem is ComboBoxItem selected && selected.Tag is string tag
+                && Enum.TryParse(tag, out DiagramStyleType newType))
+                currentStyleType = newType;
             else
+                currentStyleType = DiagramStyleType.ClassicBlackWhite;
+
+            // Очищаем Canvas полностью (но НЕ коллекции блоков!)
+            DiagramCanvas.Children.Clear();
+
+            switch (currentDiagramType)
             {
-                TxtStatus.Text = "Ошибка экспорта";
-                MessageBox.Show("Не удалось экспортировать диаграмму.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                case DiagramType.FEO:
+                    if (currentFEO != null && feoBlocks != null && feoBlocks.Count > 0)
+                    {
+                        feoRenderer = new FEORenderer(DiagramCanvas, dragDropManager, CurrentStyle);
+                        feoRenderer.Render(currentFEO, feoBlocks, feoArrows);
+
+                        foreach (DiagramBlock block in feoBlocks.Values)
+                        {
+                            if (block != null && block.Visual != null)
+                                dragDropManager.AttachBlockEvents(block.Visual);
+                        }
+                    }
+                    TxtStatus.Text = "Стиль FEO обновлён";
+                    break;
+
+                case DiagramType.IDEF3:
+                    if (lastUows != null && lastUows.Count > 0 && lastJunctions != null && lastLinks != null)
+                    {
+                        idef3Renderer = new IDEF3Renderer(DiagramCanvas, blocks, CurrentStyle);
+                        idef3Renderer.RenderIDEF3(lastUows, lastJunctions, lastLinks);
+
+                        foreach (DiagramBlock block in blocks.Values)
+                        {
+                            if (block != null && block.Visual != null)
+                                dragDropManager.AttachBlockEvents(block.Visual);
+                        }
+                        foreach (IDEF3Junction junc in lastJunctions)
+                        {
+                            if (junc != null)
+                                idef3Renderer.AttachJunctionDragEvents(junc.Id, id => idef3Renderer.UpdateConnections());
+                        }
+                    }
+                    TxtStatus.Text = "Стиль IDEF3 обновлён";
+                    break;
+
+                case DiagramType.IDEF0:
+                    if (blocks != null && blocks.Count > 0 && rawArrowData != null && rawArrowData.Count > 0)
+                    {
+                        // Новый рендерер с нужным стилем
+                        diagramRenderer = new DiagramRenderer(DiagramCanvas, CurrentStyle);
+
+                        // Пересоздаём все ВИЗУАЛЬНЫЕ блоки!
+                        var newBlocks = new Dictionary<string, DiagramBlock>();
+                        foreach (var blockData in blocks)
+                        {
+                            var oldBlock = blockData.Value;
+                            // Воспроизведи информацию: размеры, текст, position
+                            var newBlock = diagramRenderer.CreateBlock(
+                                oldBlock.Text,
+                                oldBlock.Code,
+                                Canvas.GetLeft(oldBlock.Visual),
+                                Canvas.GetTop(oldBlock.Visual),
+                                oldBlock.Visual.Width,
+                                oldBlock.Visual.Height
+                            );
+                            newBlocks[newBlock.Code] = newBlock;
+                            dragDropManager.AttachBlockEvents(newBlock.Visual);
+                        }
+                        blocks = newBlocks; // пересохрани коллекцию
+
+                        // Перерисуй стрелки
+                        RenderArrowsIDEF0();
+                    }
+                    break;
+
+                case DiagramType.NodeTree:
+                    if (nodeTreeData != null && nodeTreeData.Count > 0)
+                    {
+                        var nodeTreeRenderer = new NodeTreeRenderer(DiagramCanvas, blocks, connectionManager, CurrentStyle);
+                        nodeTreeRenderer.RenderNodeTree(nodeTreeData);
+
+                        foreach (DiagramBlock block in blocks.Values)
+                        {
+                            if (block != null && block.Visual != null)
+                                dragDropManager.AttachBlockEvents(block.Visual);
+                        }
+                    }
+                    TxtStatus.Text = "Стиль NodeTree обновлён";
+                    break;
             }
         }
 
-        // ========== СТАТУС-БАР ==========
+        private void DiagramTextBox_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            DiagramTextBox.Focus();
+        }
+
+        // ==== Обновление status bar ====
         private void UpdateStatusBar()
         {
             TxtBlockCount.Text = blocks.Count.ToString();
             TxtArrowCount.Text = arrows.Count.ToString();
         }
+
     }
 }

@@ -34,6 +34,20 @@
                 VerticalAlignment="Center" Margin="10,0"
                 Checked="ChkLockLabels_Changed" Unchecked="ChkLockLabels_Changed" 
                 IsTabStop="False" Focusable="False" IsChecked="True"/>
+            <ComboBox x:Name="StyleComboBox"
+          Width="170"
+          Height="35"
+          Margin="18,5,5,5"
+          VerticalContentAlignment="Center"
+          HorizontalContentAlignment="Center"
+          FontWeight="Bold"
+          SelectionChanged="StyleComboBox_SelectionChanged">
+                <ComboBoxItem Content="Чёрно-белый (Strict)" Tag="Classic" IsSelected="True"/>
+                <ComboBoxItem Content="Пастель (Soft pastel)" Tag="SoftPastel"/>
+                <ComboBoxItem Content="Голубой (Presentation)" Tag="Presentation"/>
+                <ComboBoxItem Content="Схема/Blueprint" Tag="Blueprint"/>
+            </ComboBox>
+
         </StackPanel>
 
         <!-- Рабочая область -->
@@ -45,7 +59,8 @@
 
             <!-- Текстовая область -->
             <Border Grid.Column="0" Background="#34495E" BorderBrush="#2C3E50" BorderThickness="2" Margin="5">
-                <TextBox x:Name="DiagramTextBox" 
+                <TextBox x:Name="DiagramTextBox"
+                         MouseDown="DiagramTextBox_MouseDown"
                          TextWrapping="Wrap" 
                          AcceptsReturn="True"
                          VerticalScrollBarVisibility="Auto"
@@ -67,10 +82,9 @@
                               PreviewMouseUp="CanvasScrollViewer_PreviewMouseUp"
                               Focusable="True">
                     <Canvas x:Name="DiagramCanvas" 
-                            Width="2000" 
-                            Height="1500" 
-                            Background="White"
-                            Focusable="True">
+        MinWidth="4000" MinHeight="4000"
+        Background="White"
+        Focusable="True">
                         <Canvas.LayoutTransform>
                             <ScaleTransform x:Name="CanvasScaleTransform" ScaleX="1.0" ScaleY="1.0"/>
                         </Canvas.LayoutTransform>

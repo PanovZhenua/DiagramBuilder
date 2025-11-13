@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Xml.Linq;
 using DiagramBuilder.Models;
 using DiagramBuilder.Services.Core;
 using DiagramBuilder.Services.Rendering;
@@ -21,6 +22,7 @@ namespace DiagramBuilder.Services.Management
         private bool blockDraggingEnabled = true;
         private bool labelDraggingEnabled = false;
         private Action onBlockMoved;
+        private bool snapEnabled = true; // По умолчанию включено
 
         public DragDropManager(
             Dictionary<string, DiagramBlock> blocks,
@@ -33,13 +35,22 @@ namespace DiagramBuilder.Services.Management
             this.connectionManager = connectionManager;
         }
 
+        public void SetSnapEnabled(bool enabled)
+        {
+            snapEnabled = enabled;
+        }
+
         public void SetOnBlockMovedCallback(Action callback) => onBlockMoved = callback;
         public void SetBlockDraggingEnabled(bool enabled) => blockDraggingEnabled = enabled;
         public void SetLabelDraggingEnabled(bool enabled) => labelDraggingEnabled = enabled;
 
         public void AttachBlockEvents(UIElement element)
         {
-            element.MouseLeftButtonDown += OnBlockMouseDown;
+            element.MouseLeftButtonDown += (s, e) =>
+            {
+                ((MainWindow)Application.Current.MainWindow).SelectedElement = element;
+                OnBlockMouseDown(s, e);
+            };
             element.MouseMove += OnBlockMouseMove;
             element.MouseLeftButtonUp += OnBlockMouseUp;
             if (element is FrameworkElement fe)
@@ -48,7 +59,11 @@ namespace DiagramBuilder.Services.Management
 
         public void AttachLabelEvents(TextBlock label)
         {
-            label.MouseLeftButtonDown += OnLabelMouseDown;
+            label.MouseLeftButtonDown += (s, e) =>
+            {
+                ((MainWindow)Application.Current.MainWindow).SelectedElement = label;
+                OnLabelMouseDown(s, e);
+            };
             label.MouseMove += OnLabelMouseMove;
             label.MouseLeftButtonUp += OnLabelMouseUp;
             label.Cursor = labelDraggingEnabled ? Cursors.SizeAll : Cursors.Arrow;
@@ -74,6 +89,22 @@ namespace DiagramBuilder.Services.Management
             double newLeft = Canvas.GetLeft(draggedElement) + offset.X;
             double newTop = Canvas.GetTop(draggedElement) + offset.Y;
 
+            // Проверяем, зажат ли Shift (отключение snap)
+            bool shiftPressed = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+
+            // Если snap включен и Shift НЕ зажат — применяем выравнивание
+            Point mousePosOnCanvas = e.GetPosition(canvas);
+
+            if (snapEnabled && !shiftPressed)
+            {
+                Point snapped = SnapHelper.SnapToGrid(draggedElement, blocks,
+                    new Point(newLeft, newTop),
+                    mousePosOnCanvas);
+                newLeft = snapped.X;
+                newTop = snapped.Y;
+            }
+
+
             Canvas.SetLeft(draggedElement, newLeft);
             Canvas.SetTop(draggedElement, newTop);
 
@@ -89,6 +120,30 @@ namespace DiagramBuilder.Services.Management
             renderer?.UpdateArrows();
             onBlockMoved?.Invoke();
             e.Handled = true;
+        }
+
+        public DiagramBlock GetBlockByVisual(UIElement visual)
+        {
+            foreach (var block in blocks.Values)
+                if (block.Visual == visual) return block;
+            return null;
+        }
+
+        public void UpdateBlockConnections(DiagramBlock block)
+        {
+            if (connectionManager != null && block != null)
+                connectionManager.UpdateConnectionsForBlock(block.Code);
+        }
+
+        public void UpdateAllArrows()
+        {
+            if (renderer != null)
+                renderer.UpdateArrows();
+        }
+
+        public void NotifyBlockMoved()
+        {
+            onBlockMoved?.Invoke();
         }
 
         private void OnBlockMouseUp(object sender, MouseButtonEventArgs e)
