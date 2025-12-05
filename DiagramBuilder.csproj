@@ -19,7 +19,7 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
+    <Optimize>true</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
@@ -67,6 +67,7 @@
     </ApplicationDefinition>
     <Compile Include="Models\Arrows\ArrowData.cs" />
     <Compile Include="Models\Arrows\ConnectionLine.cs" />
+    <Compile Include="Models\Blocks\DFDBlock.cs" />
     <Compile Include="Models\DiagramType.cs" />
     <Compile Include="Models\FEODiagram.cs" />
     <Compile Include="Models\Junctions\IDEF3Diagram.cs" />
@@ -83,6 +84,7 @@
     <Compile Include="Services\Parsers\DiagramParser.cs" />
     <Compile Include="Services\Export\ExportResult.cs" />
     <Compile Include="Services\Export\SimpleCanvasExporter.cs" />
+    <Compile Include="Services\Rendering\DFDRenderer.cs" />
     <Compile Include="Services\Rendering\DiagramRenderer.cs" />
     <Compile Include="Services\Management\DiagramTypeManagers.cs" />
     <Compile Include="Services\Management\DragDropManager.cs" />

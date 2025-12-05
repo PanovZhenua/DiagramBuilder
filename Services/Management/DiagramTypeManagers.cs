@@ -46,12 +46,18 @@ namespace DiagramBuilder.Services
                         return DiagramType.FEO;
                     else if (typeStr == "IDEF3")
                         return DiagramType.IDEF3;
+                    else if (typeStr == "DFD" || typeStr == "DATA FLOW DIAGRAM")
+                        return DiagramType.DFD;
                 }
 
                 // Формат 2: Упоминание типа в комментарии
                 string upperLine = trimmed.ToUpper();
 
-                if (upperLine.Contains("IDEF0") || upperLine.Contains("ФУНКЦИОНАЛЬНАЯ МОДЕЛЬ"))
+                if (upperLine.Contains("DFD") || upperLine.Contains("DATA FLOW DIAGRAM") || upperLine.Contains("ПОТОКОВ ДАННЫХ"))
+                {
+                    return DiagramType.DFD;
+                }
+                else if (upperLine.Contains("IDEF0") || upperLine.Contains("ФУНКЦИОНАЛЬНАЯ МОДЕЛЬ"))
                 {
                     return DiagramType.IDEF0;
                 }
@@ -94,6 +100,8 @@ namespace DiagramBuilder.Services
                     return "FEO - Альтернативное представление";
                 case DiagramType.IDEF3:
                     return "IDEF3 - Процессная модель";
+                case DiagramType.DFD:
+                    return "DFD — Диаграмма потоков данных";
                 default:
                     return "Неизвестный тип";
             }
@@ -114,6 +122,8 @@ namespace DiagramBuilder.Services
                     return GetFEOSample();
                 case DiagramType.IDEF3:
                     return GetIDEF3Sample();
+                case DiagramType.DFD:
+                    return GetDFDSample();
                 default:
                     return "";
             }
@@ -166,6 +176,24 @@ ARROW|A1|A2|Основной путь|connect";
 UOW|1|Подготовка компонентов|100|200|180|80
 UOW|2|Установка материнской платы|350|200|220|80
 LINK|1|2";
+        }
+
+        private string GetDFDSample()
+        {
+            return @"#TYPE:DFD
+# DFD - Диаграмма потоков данных
+# Формат: PROCESS|id|название|x|y
+#         STORE|id|название|x|y
+#         ENTITY|id|название|x|y
+#         ARROW|from|to|label
+
+PROCESS|P1|Сбор данных|100|100
+PROCESS|P2|Обработка|300|200
+STORE|S1|Архив|200|300
+ENTITY|E1|Оператор|50|250
+ARROW|E1|P1|Данные от оператора
+ARROW|P1|P2|Поток данных
+ARROW|P2|S1|Запись в архив";
         }
     }
 }

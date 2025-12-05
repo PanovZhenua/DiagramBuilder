@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using DiagramBuilder.Models;
+using DiagramBuilder.Models.Blocks;
 using DiagramBuilder.Services;
 using DiagramBuilder.Services.Core;
 using DiagramBuilder.Services.Export;
@@ -17,70 +18,83 @@ namespace DiagramBuilder
 {
     public partial class MainWindow : Window
     {
-        // ==== Основные коллекции и менеджеры ====
-        private Dictionary<string, DiagramBlock> blocks = new Dictionary<string, DiagramBlock>();
-        private List<DiagramArrow> arrows = new List<DiagramArrow>();
-        private DiagramRenderer renderer;
-        private ConnectionManager connectionManager;
-        private DragDropManager dragDropManager;
-        private DiagramTypeManagers typeManager;
-        private const double MoveStep = 5.0; // шаг перемещения
-        private UIElement selectedElement; // для блока или label
+        // === Поля для DFD ===
+        private DFDDiagram currentDFD;
+        private DFDRenderer dfdRenderer;
+        private Dictionary<string, FrameworkElement> dfdBlockVisuals;
+        private Dictionary<string, FrameworkElement> blockVisuals = new Dictionary<string, FrameworkElement>();
 
-        // FEO
-        private FEODiagram currentFEO;
-        private Dictionary<string, DiagramBlock> feoBlocks = new Dictionary<string, DiagramBlock>();
-        private List<DiagramArrow> feoArrows = new List<DiagramArrow>();
+        // === Остальные поля ===
+        private Dictionary<string, DiagramBlock> blocks;
+        private readonly List<DiagramArrow> arrows;
+        private readonly DiagramRenderer renderer;
+        private readonly ConnectionManager connectionManager;
+        private readonly DragDropManager dragDropManager;
+        private readonly DiagramTypeManagers typeManager;
+        private const double MoveStep = 5.0;
+        private UIElement selectedElement;
+
+        private readonly FEODiagram currentFEO;
+        private readonly Dictionary<string, DiagramBlock> feoBlocks;
+        private readonly List<DiagramArrow> feoArrows;
         private FEORenderer feoRenderer;
 
-        // IDEF3
-        private List<IDEF3UOW> lastUows = new List<IDEF3UOW>();
-        private List<IDEF3Junction> lastJunctions = new List<IDEF3Junction>();
-        private List<IDEF3Link> lastLinks = new List<IDEF3Link>();
+        private List<IDEF3UOW> lastUows;
+        private List<IDEF3Junction> lastJunctions;
+        private List<IDEF3Link> lastLinks;
         private IDEF3Renderer idef3Renderer;
 
-        // IDEF0
         private DiagramRenderer diagramRenderer;
-        private List<ArrowData> rawArrowData = new List<ArrowData>();
+        private List<ArrowData> rawArrowData;
 
-        // NodeTree (если используется)
         private NodeTreeRenderer nodeTreeRenderer;
-        private List<DiagramParser.NodeData> nodeTreeData = new List<DiagramParser.NodeData>();
+        private List<DiagramParser.NodeData> nodeTreeData;
 
-        // Тип и стиль диаграммы
-        private DiagramType currentDiagramType = DiagramType.IDEF0;
-        private DiagramStyleType currentStyleType = DiagramStyleType.ClassicBlackWhite;
+        private DiagramType currentDiagramType;
+        private DiagramStyleType currentStyleType;
         private DiagramStyle CurrentStyle { get { return DiagramStyle.GetStyle(currentStyleType); } }
 
-        // Масштабирование и панорамирование
-        private double currentZoom = 1.0;
+        private double currentZoom;
         private const double MIN_ZOOM = 0.2;
         private const double MAX_ZOOM = 3.0;
         private const double ZOOM_STEP = 0.1;
-        private bool isPanning = false;
-        private Point panStartMouse, panStartOffset;
+        private bool isPanning;
+        private Point panStartMouse;
+        private Point panStartOffset;
 
         public MainWindow()
         {
             InitializeComponent();
 
-            // Создание менеджеров/рендереров схемы
+            blocks = new Dictionary<string, DiagramBlock>();
+            arrows = new List<DiagramArrow>();
+            feoBlocks = new Dictionary<string, DiagramBlock>();
+            feoArrows = new List<DiagramArrow>();
+            lastUows = new List<IDEF3UOW>();
+            lastJunctions = new List<IDEF3Junction>();
+            lastLinks = new List<IDEF3Link>();
+            rawArrowData = new List<ArrowData>();
+            nodeTreeData = new List<DiagramParser.NodeData>();
+            blockVisuals = new Dictionary<string, FrameworkElement>();
+            currentZoom = 1.0;
+
             renderer = new DiagramRenderer(DiagramCanvas, CurrentStyle);
             connectionManager = new ConnectionManager(DiagramCanvas);
             dragDropManager = new DragDropManager(blocks, arrows, renderer, connectionManager);
             typeManager = new DiagramTypeManagers();
+            currentDiagramType = DiagramType.IDEF0;
+            currentStyleType = DiagramStyleType.ClassicBlackWhite;
 
-            // По умолчанию подписи заблокированы
             ChkLockLabels.IsChecked = true;
             dragDropManager.SetLabelDraggingEnabled(false);
 
-            // Регистрируем события мыши и клавиатуры для управления
             CanvasScrollViewer.PreviewMouseWheel += CanvasScrollViewer_PreviewMouseWheel;
             CanvasScrollViewer.PreviewMouseDown += CanvasScrollViewer_PreviewMouseDown;
             CanvasScrollViewer.PreviewMouseMove += CanvasScrollViewer_PreviewMouseMove;
             CanvasScrollViewer.PreviewMouseUp += CanvasScrollViewer_PreviewMouseUp;
             PreviewKeyDown += MainWindow_PreviewKeyDown;
             PreviewKeyUp += MainWindow_PreviewKeyUp;
+
             DiagramCanvas.Focusable = true;
             CanvasScrollViewer.Focusable = true;
             Loaded += (s, e) => CanvasScrollViewer.Focus();
@@ -158,7 +172,7 @@ namespace DiagramBuilder
             base.OnPreviewKeyDown(e);
 
             if (DiagramTextBox.IsKeyboardFocusWithin)
-                return; // если сфокусированы внутри DiagramTextBox, не обрабатываем стрелки
+                return;
 
             if (SelectedElement == null)
                 return;
@@ -166,8 +180,7 @@ namespace DiagramBuilder
             bool moved = false;
             double left = Canvas.GetLeft(SelectedElement);
             double top = Canvas.GetTop(SelectedElement);
-
-            double moveStep = MoveStep; // 5 по умолчанию
+            double moveStep = MoveStep;
 
             switch (e.Key)
             {
@@ -194,7 +207,7 @@ namespace DiagramBuilder
                 Canvas.SetLeft(SelectedElement, left);
                 Canvas.SetTop(SelectedElement, top);
 
-                // --- Для блоков ---
+                // --- Для обычных блоков (IDEF0, FEO, NodeTree) ---
                 if (SelectedElement is Border)
                 {
                     var block = dragDropManager.GetBlockByVisual(SelectedElement);
@@ -203,9 +216,28 @@ namespace DiagramBuilder
                         block.X = left;
                         block.Y = top;
                         dragDropManager.UpdateBlockConnections(block);
+                        dragDropManager.UpdateAllArrows();
+                        dragDropManager.NotifyBlockMoved();
                     }
-                    dragDropManager.UpdateAllArrows();
-                    dragDropManager.NotifyBlockMoved();
+                    // --- ДЛЯ DFD БЛОКОВ ---
+                    else if (currentDiagramType == DiagramType.DFD && dfdBlockVisuals != null)
+                    {
+                        string blockId = dfdBlockVisuals.FirstOrDefault(kv => kv.Value == SelectedElement).Key;
+                        if (blockId != null)
+                        {
+                            var proc = currentDFD.Processes.FirstOrDefault(p => p.Id == blockId);
+                            if (proc != null) { proc.X = left; proc.Y = top; }
+
+                            var entity = currentDFD.Entities.FirstOrDefault(ent => ent.Id == blockId);
+                            if (entity != null) { entity.X = left; entity.Y = top; }
+
+                            var store = currentDFD.Stores.FirstOrDefault(s => s.Id == blockId);
+                            if (store != null) { store.X = left; store.Y = top; }
+
+                            dfdRenderer.Render(currentDFD);
+                            dfdBlockVisuals = dfdRenderer.GetBlockVisuals();
+                        }
+                    }
                 }
 
                 // --- Для junction (ellipse) ---
@@ -214,10 +246,7 @@ namespace DiagramBuilder
                     double radius = ellipse.Width / 2;
                     double centerX = left + radius;
                     double centerY = top + radius;
-
-                    // новое положение центра
                     var snappedCenter = SnapHelper.SnapJunctionToBlocks(new Point(centerX, centerY), blocks);
-
                     left = snappedCenter.X - radius;
                     top = snappedCenter.Y - radius;
                     Canvas.SetLeft(ellipse, left);
@@ -225,13 +254,12 @@ namespace DiagramBuilder
 
                     if ((idef3Renderer?.SetJunctionPositionFromEllipse(ellipse, left, top) ?? false))
                         idef3Renderer.UpdateConnections();
-
-                    e.Handled = true;
                 }
 
                 e.Handled = true;
             }
         }
+
 
         // ==== Масштабирование canvas через Ctrl+колесо мыши ====
         private void CanvasScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -285,6 +313,7 @@ namespace DiagramBuilder
                     case DiagramType.FEO: LoadFEODiagram(); break;
                     case DiagramType.NodeTree: LoadNodeTreeDiagram(); break;
                     case DiagramType.IDEF3: LoadIDEF3Diagram(); break;
+                    case DiagramType.DFD: LoadDFDDiagram(); break;
                 }
                 ChkLockLabels.IsChecked = true;
                 dragDropManager.SetLabelDraggingEnabled(false);
@@ -352,6 +381,7 @@ namespace DiagramBuilder
                     if (arrow.Label != null) dragDropManager.AttachLabelEvents(arrow.Label);
                 }
             }
+
         }
 
         // ==== Загрузка схемы FEO ====
@@ -501,8 +531,7 @@ namespace DiagramBuilder
 
             dragDropManager.SetOnBlockMovedCallback(delegate
             {
-                if (idef3Renderer != null)
-                    idef3Renderer.UpdateConnections();
+                idef3Renderer?.UpdateConnections();
             });
 
             foreach (DiagramBlock block in blocks.Values)
@@ -513,6 +542,71 @@ namespace DiagramBuilder
 
             MessageBox.Show(
                 "IDEF3 загружена!\n\nРабот (UOW): " + lastUows.Count + "\nПерекрёстков: " + lastJunctions.Count + "\nСвязей: " + lastLinks.Count,
+                "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // ==== Загрузка DFD ====
+        private void LoadDFDDiagram()
+        {
+            currentDFD = new DFDDiagram();
+            string[] lines = DiagramTextBox.Text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (string line in lines)
+            {
+                string trimmed = line.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#") || trimmed.StartsWith("//"))
+                    continue;
+
+                string[] parts = trimmed.Split('|');
+                if (parts.Length < 2) continue;
+
+                switch (parts[0].ToUpper())
+                {
+                    case "PROCESS":
+                        if (parts.Length >= 5 && double.TryParse(parts[3].Trim(), out double px) && double.TryParse(parts[4].Trim(), out double py))
+                            currentDFD.Processes.Add(new DFDProcess { Id = parts[1].Trim(), Name = parts[2].Trim(), X = px, Y = py });
+                        break;
+                    case "ENTITY":
+                        if (parts.Length >= 5 && double.TryParse(parts[3].Trim(), out double ex) && double.TryParse(parts[4].Trim(), out double ey))
+                            currentDFD.Entities.Add(new DFDEntity { Id = parts[1].Trim(), Name = parts[2].Trim(), X = ex, Y = ey });
+                        break;
+                    case "STORE":
+                        if (parts.Length >= 5 && double.TryParse(parts[3].Trim(), out double sx) && double.TryParse(parts[4].Trim(), out double sy))
+                            currentDFD.Stores.Add(new DFDStore { Id = parts[1].Trim(), Name = parts[2].Trim(), X = sx, Y = sy });
+                        break;
+                    case "ARROW":
+                        if (parts.Length >= 3)
+                            currentDFD.Arrows.Add(new DFDArrow { FromId = parts[1].Trim(), ToId = parts[2].Trim(), Label = (parts.Length >= 4 ? parts[3].Trim() : "") });
+                        break;
+                }
+            }
+
+            if (currentDFD.Processes.Count + currentDFD.Entities.Count + currentDFD.Stores.Count == 0)
+            {
+                MessageBox.Show("Не найдено блоков!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            dfdRenderer = new DFDRenderer(DiagramCanvas);
+            dfdRenderer.Render(currentDFD);
+            dfdBlockVisuals = dfdRenderer.GetBlockVisuals();
+
+            // Регистрируем drag для блоков
+            foreach (var kvp in dfdBlockVisuals)
+            {
+                string blockId = kvp.Key;
+                FrameworkElement visual = kvp.Value;
+                dragDropManager.AttachDFDBlockDrag(visual, currentDFD, dfdRenderer, blockId);
+            }
+
+            // Регистрируем drag для подписей
+            var initialLabels = dfdRenderer.GetArrowLabels();
+            foreach (var label in initialLabels)
+                dragDropManager.AttachLabelEvents(label);
+
+            currentDiagramType = DiagramType.DFD;
+
+            MessageBox.Show($"DFD: процессов {currentDFD.Processes.Count}, объектов {currentDFD.Entities.Count}, хранилищ {currentDFD.Stores.Count}, потоков {currentDFD.Arrows.Count}",
                 "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
@@ -549,9 +643,7 @@ namespace DiagramBuilder
             if (dragDropManager != null)
             {
                 dragDropManager.SetLabelDraggingEnabled(!(ChkLockLabels.IsChecked ?? false));
-                TxtStatus.Text = ChkLockLabels.IsChecked == true
-                    ? "Подписи заблокированы"
-                    : "Подписи разблокированы";
+                TxtStatus.Text = ChkLockLabels.IsChecked == true ? "Подписи заблокированы" : "Подписи разблокированы";
             }
         }
 
@@ -680,6 +772,31 @@ namespace DiagramBuilder
                     }
                     TxtStatus.Text = "Стиль NodeTree обновлён";
                     break;
+
+                case DiagramType.DFD:
+                    if (currentDFD != null)
+                    {
+                        dfdRenderer = new DFDRenderer(DiagramCanvas);
+                        dfdRenderer.Render(currentDFD);
+                        dfdBlockVisuals = dfdRenderer.GetBlockVisuals();
+                        var arrowLabels = dfdRenderer.GetArrowLabels();
+
+                        // Регистрируем drag для всех блоков
+                        foreach (var kvp in dfdBlockVisuals)
+                        {
+                            string blockId = kvp.Key;
+                            FrameworkElement visual = kvp.Value; 
+                            dragDropManager.AttachDFDBlockDrag(visual, currentDFD, dfdRenderer, blockId);
+                        }
+
+                        // Регистрируем drag для подписей
+                        foreach (var label in arrowLabels)
+                            dragDropManager.AttachLabelEvents(label);
+
+                        TxtStatus.Text = "DFD загружена";
+                    }
+                    break;
+
             }
         }
 

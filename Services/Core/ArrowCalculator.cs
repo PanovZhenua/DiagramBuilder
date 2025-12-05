@@ -200,37 +200,60 @@ namespace DiagramBuilder.Services.Core
             double endX = toBlock.Left;
             double endY = toY;
 
+            // Определяем, к какой стороне ближе точка входа в toBlock
+            string endDirection;
+            if (Math.Abs(endY - toBlock.Top) < Math.Abs(endY - toBlock.Bottom) &&
+                Math.Abs(endY - toBlock.Top) < Math.Abs(endX - toBlock.Left) &&
+                Math.Abs(endY - toBlock.Top) < Math.Abs(endX - toBlock.Right))
+            {
+                endDirection = "down"; // входим сверху в блок
+            }
+            else if (Math.Abs(endY - toBlock.Bottom) < Math.Abs(endY - toBlock.Top) &&
+                     Math.Abs(endY - toBlock.Bottom) < Math.Abs(endX - toBlock.Left) &&
+                     Math.Abs(endY - toBlock.Bottom) < Math.Abs(endX - toBlock.Right))
+            {
+                endDirection = "up"; // входим снизу в блок
+            }
+            else
+            {
+                endDirection = "right"; // по умолчанию считаем, что входим слева блока
+            }
+
             if (Math.Abs(startY - endY) < 10)
             {
                 segments.Add(new ArrowSegment
                 {
                     Start = new Point(startX, startY),
                     End = new Point(endX, endY),
-                    Direction = "right"
+                    Direction = endDirection
                 });
             }
             else
             {
                 double midX = (startX + endX) / 2;
+
                 segments.Add(new ArrowSegment
                 {
                     Start = new Point(startX, startY),
                     End = new Point(midX, startY),
                     Direction = "right"
                 });
+
                 segments.Add(new ArrowSegment
                 {
                     Start = new Point(midX, startY),
                     End = new Point(midX, endY),
                     Direction = endY > startY ? "down" : "up"
                 });
+
                 segments.Add(new ArrowSegment
                 {
                     Start = new Point(midX, endY),
                     End = new Point(endX, endY),
-                    Direction = "right"
+                    Direction = endDirection
                 });
             }
+
             return segments;
         }
 
