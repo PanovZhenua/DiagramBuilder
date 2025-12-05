@@ -1,0 +1,131 @@
+﻿<Window x:Class="DiagramBuilder.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Редактор диаграмм IDEF0/FEO/NodeTree/IDEF3" 
+        Height="850" Width="1600"
+        WindowState="Maximized">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Панель управления -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Background="#2C3E50">
+            <Button x:Name="BtnLoad" Content="📂 Загрузить" Width="120" Height="35" Margin="5"
+                Background="#3498DB" Foreground="White" FontWeight="Bold" 
+                Click="LoadFromText_Click" IsTabStop="False" Focusable="False"/>
+            <Button x:Name="BtnClear" Content="🗑️ Очистить" Width="120" Height="35" Margin="5"
+                Background="#E74C3C" Foreground="White" FontWeight="Bold" 
+                Click="Clear_Click" IsTabStop="False" Focusable="False"/>
+            <Button x:Name="BtnExport" Content="💾 Экспорт" Width="120" Height="35" Margin="5"
+                Background="#27AE60" Foreground="White" FontWeight="Bold" 
+                Click="Export_Click" IsTabStop="False" Focusable="False"/>
+
+            <Separator Width="20" Background="Transparent"/>
+
+            <CheckBox x:Name="ChkLockBlocks" Content="🔒 Блокировать блоки" Foreground="White" 
+                VerticalAlignment="Center" Margin="10,0"
+                Checked="ChkLockBlocks_Changed" Unchecked="ChkLockBlocks_Changed" 
+                IsTabStop="False" Focusable="False"/>
+            <CheckBox x:Name="ChkLockLabels" Content="🔒 Блокировать подписи" Foreground="White" 
+                VerticalAlignment="Center" Margin="10,0"
+                Checked="ChkLockLabels_Changed" Unchecked="ChkLockLabels_Changed" 
+                IsTabStop="False" Focusable="False" IsChecked="True"/>
+            <ComboBox x:Name="StyleComboBox"
+          Width="170"
+          Height="35"
+          Margin="18,5,5,5"
+          VerticalContentAlignment="Center"
+          HorizontalContentAlignment="Center"
+          FontWeight="Bold"
+          SelectionChanged="StyleComboBox_SelectionChanged">
+                <ComboBoxItem Content="Чёрно-белый (Strict)" Tag="Classic" IsSelected="True"/>
+                <ComboBoxItem Content="Пастель (Soft pastel)" Tag="SoftPastel"/>
+                <ComboBoxItem Content="Голубой (Presentation)" Tag="Presentation"/>
+                <ComboBoxItem Content="Схема/Blueprint" Tag="Blueprint"/>
+            </ComboBox>
+
+        </StackPanel>
+
+        <!-- Рабочая область -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Текстовая область -->
+            <Border Grid.Column="0" Background="#34495E" BorderBrush="#2C3E50" BorderThickness="2" Margin="5">
+                <TextBox x:Name="DiagramTextBox"
+                         MouseDown="DiagramTextBox_MouseDown"
+                         TextWrapping="Wrap" 
+                         AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" 
+                         FontSize="12"
+                         Padding="10"
+                         Background="#2C3E50"
+                         Foreground="White"/>
+            </Border>
+
+            <!-- Canvas с нормальной прокруткой и адаптивным масштабированием -->
+            <Border Grid.Column="1" Background="White" BorderBrush="#BDC3C7" BorderThickness="2" Margin="5">
+                <ScrollViewer x:Name="CanvasScrollViewer" 
+                              HorizontalScrollBarVisibility="Auto" 
+                              VerticalScrollBarVisibility="Auto"
+                              PreviewMouseWheel="CanvasScrollViewer_PreviewMouseWheel"
+                              PreviewMouseDown="CanvasScrollViewer_PreviewMouseDown"
+                              PreviewMouseMove="CanvasScrollViewer_PreviewMouseMove"
+                              PreviewMouseUp="CanvasScrollViewer_PreviewMouseUp"
+                              Focusable="True">
+                    <Canvas x:Name="DiagramCanvas" 
+        MinWidth="4000" MinHeight="4000"
+        Background="White"
+        Focusable="True">
+                        <Canvas.LayoutTransform>
+                            <ScaleTransform x:Name="CanvasScaleTransform" ScaleX="1.0" ScaleY="1.0"/>
+                        </Canvas.LayoutTransform>
+                    </Canvas>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Статус-бар -->
+        <StatusBar Grid.Row="2" Background="#2C3E50" Height="30">
+            <StatusBarItem>
+                <TextBlock x:Name="TxtStatus" Text="Готов к работе" Foreground="White" FontWeight="Bold"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Тип: " Foreground="White"/>
+                    <TextBlock x:Name="TxtDiagramType" Text="IDEF0" Foreground="#3498DB" FontWeight="Bold"/>
+                </StackPanel>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Блоков: " Foreground="White"/>
+                    <TextBlock x:Name="TxtBlockCount" Text="0" Foreground="#27AE60" FontWeight="Bold"/>
+                </StackPanel>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Стрелок: " Foreground="White"/>
+                    <TextBlock x:Name="TxtArrowCount" Text="0" Foreground="#E67E22" FontWeight="Bold"/>
+                </StackPanel>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Масштаб: " Foreground="White"/>
+                    <TextBlock x:Name="TxtZoomLevel" Text="100%" Foreground="#9B59B6" FontWeight="Bold"/>
+                </StackPanel>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>
