@@ -1,0 +1,14 @@
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\bin\Релиз\DiagramBuilder.exe.config
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\bin\Релиз\DiagramBuilder.exe
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\bin\Релиз\DiagramBuilder.pdb
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\DiagramBuilder.csproj.AssemblyReference.cache
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\MainWindow.baml
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\MainWindow.g.cs
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\App.g.cs
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\DiagramBuilder_MarkupCompile.cache
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\DiagramBuilder.g.resources
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\DiagramBuilder.Properties.Resources.resources
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\DiagramBuilder.csproj.GenerateResource.cache
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\DiagramBuilder.csproj.CoreCompileInputs.cache
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\DiagramBuilder.exe
+C:\Users\HP\Desktop\Проекты\DiagramBuilder\obj\Релиз\DiagramBuilder.pdb
